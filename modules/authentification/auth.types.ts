@@ -1,0 +1,8 @@
+export interface Register{
+  nomUser:string;
+  prenom:string;
+  tel?:string | null;
+  email:string;
+  login:string;
+  password:string;
+}
