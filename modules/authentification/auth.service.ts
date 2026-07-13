@@ -6,7 +6,7 @@ import { Register, Login } from "@/modules/authentification/auth.types";
 import { signToken } from "@/libs/jwt";
 import * as AuthRepository from "./auth.repository";
 import * as RefreshTokenService from "./refresh-token.service";
-import { sendVerificationEmail,sendResetPasswordEmail} from "@/libs/email";
+import { sendVerificationEmail, sendResetPasswordEmail } from "@/libs/email";
 
 function createAccessToken(user: {
   idUser: number;
@@ -27,16 +27,16 @@ export async function register(data: Register) {
   const existingLogin = await AuthRepository.FindByLogin(data.login);
   if (existingLogin) {
     throw createError("Ce login existe déjà", 409);
-  }  
+  }
   const passwordHash = await hashPassword(data.password);
   const verificationToken = crypto.randomBytes(32).toString("hex");
 
   const user = await AuthRepository.RegisterUser({
     ...data,
     password: passwordHash,
-     verificationToken,
+    verificationToken,
   });
- await sendVerificationEmail(user.email, verificationToken);
+  await sendVerificationEmail(user.email, verificationToken);
   return user;
 }
 export async function login(data: Login) {
@@ -111,7 +111,6 @@ export async function changePassword(
     message: "Mot de passe modifié avec succès",
   };
 }
-
 export async function forgotPassword(email: string) {
   const user = await AuthRepository.FindByEmail(email);
 
@@ -130,12 +129,22 @@ export async function forgotPassword(email: string) {
   };
 }
 
+export async function resetPassword(token: string, newPassword: string) {
+  const user = await AuthRepository.findByResetToken(token);
 
+  if (!user) {
+    throw createError("Token invalide", 400);
+  }
 
+  if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+    throw createError("Token expiré", 400);
+  }
 
+  const passwordHash = await hashPassword(newPassword);
+  await AuthRepository.updatePassword(user.idUser, passwordHash);
+  await RefreshTokenService.revokeAll(user.idUser);
 
-
-
-
-
-
+  return {
+    message: "Mot de passe réinitialisé avec succès",
+  };
+}

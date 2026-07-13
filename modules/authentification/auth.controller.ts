@@ -47,5 +47,9 @@ export async function forgotPassword(body: unknown) {
   const data = forgotPasswordSchema.parse(body);
   return AuthService.forgotPassword(data.email);
 }
+export async function resetPassword(body: unknown) {
+  const data = resetPasswordSchema.parse(body);
+  return AuthService.resetPassword(data.token, data.newPassword);
+}
 
 

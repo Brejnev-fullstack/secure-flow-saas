@@ -51,7 +51,6 @@ export function saveResetToken(idUser: number, token: string, expires: Date) {
     },
   });
 }
-
 export function findByResetToken(token: string) {
   return prisma.user.findFirst({
     where: {
