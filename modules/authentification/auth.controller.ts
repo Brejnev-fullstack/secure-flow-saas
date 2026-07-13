@@ -1,4 +1,7 @@
-import { registerSchema } from "@/modules/authentification/auth.validate";
+import {
+  registerSchema,
+  loginSchema,
+} from "@/modules/authentification/auth.validate";
 import * as AuthService from "./auth.service";
 import { toUserResponse } from "./auth.mapper";
 
@@ -8,3 +11,10 @@ export async function register(body: unknown) {
   return toUserResponse(user);
 }
 
+export async function login(body: unknown) {
+  const data = loginSchema.parse(body);
+  const result = await AuthService.login(data);
+  return {
+    user: toUserResponse(result.user),
+  };
+}
