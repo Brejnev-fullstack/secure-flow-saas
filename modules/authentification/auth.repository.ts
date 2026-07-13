@@ -18,6 +18,7 @@ export function FindByLogin(login: string) {
 export function RegisterUser(
   data: Register & {
    password:string;
+    verificationToken:string;
  }
 ) {
   return prisma.user.create({
@@ -28,10 +29,46 @@ export function RegisterUser(
       email: data.email,
       login: data.login,
       password: data.password,
+      verificationToken:data.verificationToken
+    },
+  });
+}
+export function saveResetToken(idUser: number, token: string, expires: Date) {
+  return prisma.user.update({
+    where: {
+      idUser,
+    },
+
+    data: {
+      resetPasswordToken: token,
+      resetPasswordExpires: expires,
     },
   });
 }
 
-export function Loginuser(){
-  
+export function findByResetToken(token: string) {
+  return prisma.user.findFirst({
+    where: {
+      resetPasswordToken: token,
+    },
+  });
+}
+export function findByVerificationToken(token: string) {
+  return prisma.user.findFirst({
+    where: {
+      verificationToken: token,
+    },
+  });
+}
+export function verifyEmail(idUser: number) {
+  return prisma.user.update({
+    where: {
+      idUser,
+    },
+
+    data: {
+      emailVerified: true,
+      verificationToken: null,
+    },
+  });
 }

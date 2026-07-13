@@ -1,8 +1,24 @@
+import crypto from "crypto";
 import { createError } from "@/utils/errors";
+import { Role } from "@/generated/prisma/client";
 import { hashPassword, comparePassword } from "@/libs/bcrypt";
 import { Register, Login } from "@/modules/authentification/auth.types";
+import { signToken } from "@/libs/jwt";
 import * as AuthRepository from "./auth.repository";
+import * as RefreshTokenService from "./refresh-token.service";
+import { sendVerificationEmail} from "@/libs/email";
 
+function createAccessToken(user: {
+  idUser: number;
+  email: string;
+  role: Role;
+}) {
+  return signToken({
+    idUser: user.idUser,
+    email: user.email,
+    role: user.role,
+  });
+}
 export async function register(data: Register) {
   const existingEmail = await AuthRepository.FindByEmail(data.email);
   if (existingEmail) {
@@ -11,13 +27,16 @@ export async function register(data: Register) {
   const existingLogin = await AuthRepository.FindByLogin(data.login);
   if (existingLogin) {
     throw createError("Ce login existe déjà", 409);
-  }
+  }  
   const passwordHash = await hashPassword(data.password);
+  const verificationToken = crypto.randomBytes(32).toString("hex");
+
   const user = await AuthRepository.RegisterUser({
     ...data,
     password: passwordHash,
+     verificationToken,
   });
-
+ await sendVerificationEmail(user.email, verificationToken);
   return user;
 }
 export async function login(data: Login) {
@@ -29,7 +48,50 @@ export async function login(data: Login) {
   if (!valid) {
     throw createError("Login ou mot de passe incorrect", 401);
   }
+  if (!user.emailVerified) {
+    throw createError(
+      "Veuillez vérifier votre adresse e-mail avant de vous connecter.",
+      403,
+    );
+  }
+
+  const accessToken = createAccessToken(user);
+  const refreshToken = await RefreshTokenService.create(user.idUser);
   return {
+    accessToken,
+    refreshToken,
     user,
   };
 }
+export async function refresh(refreshToken: string) {
+  const storedToken = await RefreshTokenService.verify(refreshToken);
+  const accessToken = createAccessToken(storedToken.user);
+  const newRefreshToken = await RefreshTokenService.rotate(storedToken);
+  return {
+    accessToken,
+    refreshToken: newRefreshToken,
+    user: storedToken.user,
+  };
+}
+export async function logout(refreshToken: string) {
+  const storedToken = await RefreshTokenService.verify(refreshToken);
+  await RefreshTokenService.revoke(storedToken.id);
+}
+export async function verifyEmail(token: string) {
+  const user = await AuthRepository.findByVerificationToken(token);
+
+  if (!user) {
+    throw createError("Token invalide", 400);
+  }
+
+  await AuthRepository.verifyEmail(user.idUser);
+
+  return {
+    message: "Email vérifié avec succès",
+  };
+}
+
+
+
+
+
