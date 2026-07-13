@@ -6,7 +6,7 @@ import { Register, Login } from "@/modules/authentification/auth.types";
 import { signToken } from "@/libs/jwt";
 import * as AuthRepository from "./auth.repository";
 import * as RefreshTokenService from "./refresh-token.service";
-import { sendVerificationEmail} from "@/libs/email";
+import { sendVerificationEmail,sendResetPasswordEmail} from "@/libs/email";
 
 function createAccessToken(user: {
   idUser: number;
@@ -90,6 +90,50 @@ export async function verifyEmail(token: string) {
     message: "Email vérifié avec succès",
   };
 }
+export async function changePassword(
+  idUser: number,
+  oldPassword: string,
+  newPassword: string,
+) {
+  const user = await AuthRepository.findById(idUser);
+
+  if (!user) {
+    throw createError("Utilisateur introuvable", 404);
+  }
+  const valid = await comparePassword(oldPassword, user.password);
+  if (!valid) {
+    throw createError("Ancien mot de passe incorrect", 401);
+  }
+  const passwordHash = await hashPassword(newPassword);
+  await AuthRepository.updatePassword(idUser, passwordHash);
+  await RefreshTokenService.revokeAll(idUser);
+  return {
+    message: "Mot de passe modifié avec succès",
+  };
+}
+
+export async function forgotPassword(email: string) {
+  const user = await AuthRepository.FindByEmail(email);
+
+  if (!user) {
+    throw createError("Utilisateur introuvable", 404);
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+  await AuthRepository.saveResetToken(user.idUser, token, expires);
+  await sendResetPasswordEmail(user.email, token);
+
+  return {
+    message: "Email de récupération envoyé",
+  };
+}
+
+
+
+
+
 
 
 

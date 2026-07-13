@@ -15,6 +15,12 @@ export function FindByLogin(login: string) {
     },
   });
 }
+
+export async function findById(idUser: number) {
+  return prisma.user.findUnique({
+    where: { idUser },
+  });
+}
 export function RegisterUser(
   data: Register & {
    password:string;
@@ -69,6 +75,19 @@ export function verifyEmail(idUser: number) {
     data: {
       emailVerified: true,
       verificationToken: null,
+    },
+  });
+}
+export function updatePassword(idUser: number, password: string) {
+  return prisma.user.update({
+    where: {
+      idUser,
+    },
+
+    data: {
+      password,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
     },
   });
 }

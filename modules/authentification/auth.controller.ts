@@ -1,7 +1,10 @@
 import {
   registerSchema,
   loginSchema,
-  verifyEmailSchema
+  verifyEmailSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema
 } from "@/modules/authentification/auth.validate";
 import * as AuthService from "./auth.service";
 import { toUserResponse } from "./auth.mapper";
@@ -11,7 +14,6 @@ export async function register(body: unknown) {
   const user = await AuthService.register(data);
   return toUserResponse(user);
 }
-
 export async function login(body: unknown) {
   const data = loginSchema.parse(body);
   const result = await AuthService.login(data);
@@ -37,4 +39,13 @@ export async function verifyEmail(body: unknown) {
 
   return AuthService.verifyEmail(data.token);
 }
+export async function changePassword(idUser: number, body: unknown) {
+  const data = changePasswordSchema.parse(body);
+  return AuthService.changePassword(idUser, data.oldPassword, data.newPassword);
+}
+export async function forgotPassword(body: unknown) {
+  const data = forgotPasswordSchema.parse(body);
+  return AuthService.forgotPassword(data.email);
+}
+
 
