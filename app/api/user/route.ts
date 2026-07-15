@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
     const user = getUserFromRequest(request);
     requireRole(user.role, Role.ADMIN);
     const users = await UserController.getUsersController();
-
     return successResponse(
       users,
       "Liste des utilisateurs récupérée",
