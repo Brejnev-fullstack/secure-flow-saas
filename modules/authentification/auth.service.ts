@@ -7,6 +7,7 @@ import { signToken } from "@/libs/jwt";
 import * as AuthRepository from "./auth.repository";
 import * as RefreshTokenService from "./refresh-token.service";
 import { sendVerificationEmail, sendResetPasswordEmail } from "@/libs/email";
+import { logger } from "@/libs/logger";
 
 function createAccessToken(user: {
   idUser: number;
@@ -36,16 +37,28 @@ export async function register(data: Register) {
     password: passwordHash,
     verificationToken,
   });
+
+  logger.info("USER REGISTERED", {
+    userId: user.idUser,
+    email: user.email,
+  });
+
   await sendVerificationEmail(user.email, verificationToken);
   return user;
 }
 export async function login(data: Login) {
   const user = await AuthRepository.FindByLogin(data.login);
   if (!user) {
+    logger.warn("LOGIN FAILED - USER INTROUVABLE", {
+      login: data.login,
+    });
     throw createError("Login ou mot de passe incorrect", 401);
   }
   const valid = await comparePassword(data.password, user.password);
   if (!valid) {
+    logger.warn("LOGIN FAILED - INVALID PASSWORD", {
+      login: data.login,
+    });
     throw createError("Login ou mot de passe incorrect", 401);
   }
   if (!user.emailVerified) {
@@ -54,6 +67,11 @@ export async function login(data: Login) {
       403,
     );
   }
+
+  logger.info("LOGIN SUCCESS", {
+    userId: user.idUser,
+    email: user.email,
+  });
 
   const accessToken = createAccessToken(user);
   const refreshToken = await RefreshTokenService.create(user.idUser);
@@ -65,8 +83,14 @@ export async function login(data: Login) {
 }
 export async function refresh(refreshToken: string) {
   const storedToken = await RefreshTokenService.verify(refreshToken);
+
+  logger.info("TOKEN REFRESHED", {
+    userId: storedToken.user.idUser,
+  });
+
   const accessToken = createAccessToken(storedToken.user);
   const newRefreshToken = await RefreshTokenService.rotate(storedToken);
+
   return {
     accessToken,
     refreshToken: newRefreshToken,
