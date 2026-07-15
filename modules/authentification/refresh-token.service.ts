@@ -20,6 +20,18 @@ export async function verify(token: string) {
   if (!refreshToken) {
     throw createError("Refresh token invalide", 401);
   }
+  
+  if (refreshToken.revokedAt) {
+
+  await Repository.revokeAllByUser(
+    refreshToken.userId
+  );
+
+  throw createError(
+    "Session compromise, reconnexion nécessaire",
+    401
+  );
+}
 
   if (refreshToken.revokedAt) {
     throw createError("Refresh token révoqué", 401);
