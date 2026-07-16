@@ -15,11 +15,8 @@ export function findByHash(tokenHash: string) {
       tokenHash,
     },
 
-    select: {
-      id: true,
-      userId: true,
-      expiresAt: true,
-      revokedAt: true,
+    include: {
+      user: true,
     },
   });
 }
