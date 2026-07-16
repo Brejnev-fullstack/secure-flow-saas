@@ -3,6 +3,7 @@ import * as AuthController from "@/modules/authentification/auth.controller";
 import { handleError } from "@/utils/handle-error";
 import { successResponse } from "@/utils/api-response";
 import { loginIpLimiter, loginEmailLimiter } from "@/libs/rate-limit/";
+import { getAuditContext } from "@/modules/audit/audit.context";
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,7 +38,9 @@ export async function POST(request: NextRequest) {
         },
       );
     }
-    const result = await AuthController.login(body);
+
+    const context = getAuditContext(request);
+    const result = await AuthController.login(body,context);
     const response = successResponse(
       {
         user: result.user,

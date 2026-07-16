@@ -3,6 +3,7 @@ import * as AuthController from "@/modules/authentification/auth.controller";
 import { handleError } from "@/utils/handle-error";
 import { successResponse } from "@/utils/api-response";
 import { unauthorized } from "@/utils/errors";
+import { getAuditContext } from "@/modules/audit/audit.context";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +13,8 @@ export async function POST(request: NextRequest) {
       throw unauthorized("Refresh token manquant");
     }
 
-    const result = await AuthController.refresh(refreshToken);
+    const context = getAuditContext(request);
+    const result = await AuthController.refresh(refreshToken,context);
     const response = successResponse(
       {
         user: result.user,

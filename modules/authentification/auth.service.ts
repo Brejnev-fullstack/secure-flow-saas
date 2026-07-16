@@ -8,6 +8,9 @@ import * as AuthRepository from "./auth.repository";
 import * as RefreshTokenService from "./refresh-token.service";
 import { sendVerificationEmail, sendResetPasswordEmail } from "@/libs/email";
 import { logger } from "@/libs/logger";
+import { log as auditLog } from "@/modules/audit/audit.service";
+import { AuditAction } from "@/modules/audit/audit.actions";
+import { AuditContext } from "@/modules/audit/audit.types";
 
 function createAccessToken(user: {
   idUser: number;
@@ -20,7 +23,7 @@ function createAccessToken(user: {
     role: user.role,
   });
 }
-export async function register(data: Register) {
+export async function register(data: Register, context?: AuditContext) {
   const existingEmail = await AuthRepository.FindByEmail(data.email);
   if (existingEmail) {
     throw createError("Cet email existe déjà", 409);
@@ -38,6 +41,17 @@ export async function register(data: Register) {
     verificationToken,
   });
 
+  await auditLog({
+    userId: user.idUser,
+    action: AuditAction.USER_REGISTERED,
+    entity: "User",
+    entityId: String(user.idUser),
+    metadata: {
+      email: user.email,
+    },
+    ...context,
+  });
+
   logger.info("USER REGISTERED", {
     userId: user.idUser,
     email: user.email,
@@ -46,12 +60,24 @@ export async function register(data: Register) {
   await sendVerificationEmail(user.email, verificationToken);
   return user;
 }
-export async function login(data: Login) {
+export async function login(data: Login, context?: AuditContext) {
   const user = await AuthRepository.FindByLogin(data.login);
   if (!user) {
     logger.warn("LOGIN FAILED - USER INTROUVABLE", {
       login: data.login,
     });
+
+    await auditLog({
+      action: AuditAction.USER_LOGIN_FAILED,
+      entity: "User",
+      metadata: {
+        login: data.login,
+        reason: "USER_NOT_FOUND",
+      },
+      status: "FAILED",
+      ...context,
+    });
+
     throw createError("Login ou mot de passe incorrect", 401);
   }
   const valid = await comparePassword(data.password, user.password);
@@ -59,6 +85,18 @@ export async function login(data: Login) {
     logger.warn("LOGIN FAILED - INVALID PASSWORD", {
       login: data.login,
     });
+
+    await auditLog({
+      action: AuditAction.USER_LOGIN_FAILED,
+      entity: "User",
+      metadata: {
+        login: data.login,
+        reason: "INVALID_PASSWORD",
+      },
+      status: "FAILED",
+      ...context,
+    });
+
     throw createError("Login ou mot de passe incorrect", 401);
   }
   if (!user.emailVerified) {
@@ -73,6 +111,17 @@ export async function login(data: Login) {
     email: user.email,
   });
 
+  await auditLog({
+    userId: user.idUser,
+    action: AuditAction.USER_LOGIN,
+    entity: "User",
+    entityId: String(user.idUser),
+    metadata: {
+      email: user.email,
+    },
+    ...context,
+  });
+
   const accessToken = createAccessToken(user);
   const refreshToken = await RefreshTokenService.create(user.idUser);
   return {
@@ -81,8 +130,18 @@ export async function login(data: Login) {
     user,
   };
 }
-export async function refresh(refreshToken: string) {
+export async function refresh(refreshToken: string, context?: AuditContext) {
   const storedToken = await RefreshTokenService.verify(refreshToken);
+
+  await auditLog({
+    userId: storedToken.user.idUser,
+    action: AuditAction.TOKEN_REFRESHED,
+    entity: "RefreshToken",
+    metadata: {
+      tokenId: storedToken.id,
+    },
+    ...context,
+  });
 
   logger.info("TOKEN REFRESHED", {
     userId: storedToken.user.idUser,
@@ -97,9 +156,20 @@ export async function refresh(refreshToken: string) {
     user: storedToken.user,
   };
 }
-export async function logout(refreshToken: string) {
+export async function logout(refreshToken: string, context?: AuditContext) {
   const storedToken = await RefreshTokenService.verify(refreshToken);
   await RefreshTokenService.revoke(storedToken.id);
+
+  await auditLog({
+    userId: storedToken.user.idUser,
+    action: AuditAction.USER_LOGOUT,
+    entity: "RefreshToken",
+    entityId: String(storedToken.id),
+    metadata: {
+      refreshTokenId: storedToken.id,
+    },
+    ...context,
+  });
 }
 export async function verifyEmail(token: string) {
   const user = await AuthRepository.findByVerificationToken(token);
@@ -107,9 +177,7 @@ export async function verifyEmail(token: string) {
   if (!user) {
     throw createError("Token invalide", 400);
   }
-
   await AuthRepository.verifyEmail(user.idUser);
-
   return {
     message: "Email vérifié avec succès",
   };
@@ -118,6 +186,7 @@ export async function changePassword(
   idUser: number,
   oldPassword: string,
   newPassword: string,
+  context?: AuditContext,
 ) {
   const user = await AuthRepository.findById(idUser);
 
@@ -131,6 +200,13 @@ export async function changePassword(
   const passwordHash = await hashPassword(newPassword);
   await AuthRepository.updatePassword(idUser, passwordHash);
   await RefreshTokenService.revokeAll(idUser);
+  await auditLog({
+    userId: idUser,
+    action: AuditAction.PASSWORD_CHANGED,
+    entity: "User",
+    entityId: String(idUser),
+    ...context,
+  });
   return {
     message: "Mot de passe modifié avec succès",
   };
@@ -153,7 +229,11 @@ export async function forgotPassword(email: string) {
   };
 }
 
-export async function resetPassword(token: string, newPassword: string) {
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  context?: AuditContext,
+) {
   const user = await AuthRepository.findByResetToken(token);
 
   if (!user) {
@@ -167,6 +247,14 @@ export async function resetPassword(token: string, newPassword: string) {
   const passwordHash = await hashPassword(newPassword);
   await AuthRepository.updatePassword(user.idUser, passwordHash);
   await RefreshTokenService.revokeAll(user.idUser);
+
+  await auditLog({
+    userId: user.idUser,
+    action: AuditAction.PASSWORD_RESET_REQUESTED,
+    entity: "User",
+    entityId: String(user.idUser),
+    ...context,
+  });
 
   return {
     message: "Mot de passe réinitialisé avec succès",
