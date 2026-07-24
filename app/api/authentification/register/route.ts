@@ -7,9 +7,7 @@ import { getAuditContext } from "@/modules/audit/audit.context";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-
     const context = getAuditContext(req);
-
     const user = await AuthController.register(body,context);
 
     return successResponse(

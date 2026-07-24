@@ -61,17 +61,17 @@ export async function register(data: Register, context?: AuditContext) {
   return user;
 }
 export async function login(data: Login, context?: AuditContext) {
-  const user = await AuthRepository.FindByLogin(data.login);
+  const user = await AuthRepository.FindByEmail(data.email);
   if (!user) {
     logger.warn("LOGIN FAILED - USER INTROUVABLE", {
-      login: data.login,
+      email: data.email,
     });
 
     await auditLog({
       action: AuditAction.USER_LOGIN_FAILED,
       entity: "User",
       metadata: {
-        login: data.login,
+        email: data.email,
         reason: "USER_NOT_FOUND",
       },
       status: "FAILED",
@@ -83,14 +83,14 @@ export async function login(data: Login, context?: AuditContext) {
   const valid = await comparePassword(data.password, user.password);
   if (!valid) {
     logger.warn("LOGIN FAILED - INVALID PASSWORD", {
-      login: data.login,
+      email: data.email,
     });
 
     await auditLog({
       action: AuditAction.USER_LOGIN_FAILED,
       entity: "User",
       metadata: {
-        login: data.login,
+        email: data.email,
         reason: "INVALID_PASSWORD",
       },
       status: "FAILED",
