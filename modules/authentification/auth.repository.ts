@@ -21,6 +21,7 @@ export async function findById(idUser: number) {
     where: { idUser },
   });
 }
+
 export function RegisterUser(
   data: Register & {
    password:string;
