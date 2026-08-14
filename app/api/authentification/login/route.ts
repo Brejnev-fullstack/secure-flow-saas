@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
+
 import * as AuthController from "@/modules/authentification/auth.controller";
 import { handleError } from "@/utils/handle-error";
 import { successResponse } from "@/utils/api-response";
+
 import { loginIpLimiter, loginEmailLimiter } from "@/libs/rate-limit/";
+
 import { getAuditContext } from "@/modules/audit/audit.context";
 
 export async function POST(request: NextRequest) {
@@ -10,8 +13,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const email = body.email;
+
     const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+
+    /*
+     * Rate limiting par IP
+     */
     const ipCheck = loginIpLimiter(`login-ip-${ip}`);
+
     if (!ipCheck.success) {
       return Response.json(
         {
@@ -25,7 +34,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-     const emailCheck = loginEmailLimiter(`login-email-${email}`);
+    /*
+     * Rate limiting par email
+     */
+    const emailCheck = loginEmailLimiter(`login-email-${email}`);
+
     if (!emailCheck.success) {
       return Response.json(
         {
@@ -39,8 +52,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    /*
+     * Audit context
+     */
     const context = getAuditContext(request);
-    const result = await AuthController.login(body,context);
+
+    /*
+     * Authentification
+     */
+    const result = await AuthController.login(body, context);
+
+    /*
+     * Réponse HTTP
+     */
     const response = successResponse(
       {
         user: result.user,
@@ -48,6 +72,9 @@ export async function POST(request: NextRequest) {
       "Connexion réussie",
     );
 
+    /*
+     * Access Token
+     */
     response.cookies.set("access_token", result.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -55,6 +82,10 @@ export async function POST(request: NextRequest) {
       path: "/",
       maxAge: 60 * 15,
     });
+
+    /*
+     * Refresh Token
+     */
     response.cookies.set("refresh_token", result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

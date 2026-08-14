@@ -2,8 +2,8 @@ import crypto from "crypto";
 import { createError } from "@/utils/errors";
 import { Role } from "@/generated/prisma/client";
 import { hashPassword, comparePassword } from "@/libs/bcrypt";
-import { Register, Login } from "@/modules/authentification/auth.types";
 import { signToken } from "@/libs/jwt";
+import { Register, Login } from "@/modules/authentification/auth.types";
 import * as AuthRepository from "./auth.repository";
 import * as RefreshTokenService from "./refresh-token.service";
 import { sendVerificationEmail, sendResetPasswordEmail } from "@/libs/email";
@@ -12,27 +12,43 @@ import { log as auditLog } from "@/modules/audit/audit.service";
 import { AuditAction } from "@/modules/audit/audit.actions";
 import { AuditContext } from "@/modules/audit/audit.types";
 
-function createAccessToken(user: {
+/**
+ * Génère un access token JWT.
+ *
+ * IMPORTANT :
+ * signToken() utilise maintenant jose et retourne
+ * une Promise<string>.
+ */
+async function createAccessToken(user: {
   idUser: number;
   email: string;
   role: Role;
 }) {
-  return signToken({
+  return await signToken({
     idUser: user.idUser,
     email: user.email,
     role: user.role,
   });
 }
+
+/**
+ * Inscription
+ */
 export async function register(data: Register, context?: AuditContext) {
   const existingEmail = await AuthRepository.FindByEmail(data.email);
+
   if (existingEmail) {
     throw createError("Cet email existe déjà", 409);
   }
+
   const existingLogin = await AuthRepository.FindByLogin(data.login);
+
   if (existingLogin) {
     throw createError("Ce login existe déjà", 409);
   }
+
   const passwordHash = await hashPassword(data.password);
+
   const verificationToken = crypto.randomBytes(32).toString("hex");
 
   const user = await AuthRepository.RegisterUser({
@@ -58,10 +74,19 @@ export async function register(data: Register, context?: AuditContext) {
   });
 
   await sendVerificationEmail(user.email, verificationToken);
+
   return user;
 }
+
+/**
+ * Connexion
+ */
 export async function login(data: Login, context?: AuditContext) {
   const user = await AuthRepository.FindByEmail(data.email);
+
+  /**
+   * Utilisateur introuvable
+   */
   if (!user) {
     logger.warn("LOGIN FAILED - USER INTROUVABLE", {
       email: data.email,
@@ -80,7 +105,12 @@ export async function login(data: Login, context?: AuditContext) {
 
     throw createError("Login ou mot de passe incorrect", 401);
   }
+
+  /**
+   * Vérification du mot de passe
+   */
   const valid = await comparePassword(data.password, user.password);
+
   if (!valid) {
     logger.warn("LOGIN FAILED - INVALID PASSWORD", {
       email: data.email,
@@ -99,6 +129,10 @@ export async function login(data: Login, context?: AuditContext) {
 
     throw createError("Login ou mot de passe incorrect", 401);
   }
+
+  /**
+   * Vérification de l'email
+   */
   if (!user.emailVerified) {
     throw createError(
       "Veuillez vérifier votre adresse e-mail avant de vous connecter.",
@@ -111,6 +145,9 @@ export async function login(data: Login, context?: AuditContext) {
     email: user.email,
   });
 
+  /**
+   * Audit login réussi
+   */
   await auditLog({
     userId: user.idUser,
     action: AuditAction.USER_LOGIN,
@@ -122,17 +159,37 @@ export async function login(data: Login, context?: AuditContext) {
     ...context,
   });
 
-  const accessToken = createAccessToken(user);
+  /**
+   * Génération du JWT
+   *
+   * signToken() est maintenant asynchrone
+   */
+  const accessToken = await createAccessToken(user);
+
+  /**
+   * Création du refresh token
+   */
   const refreshToken = await RefreshTokenService.create(user.idUser);
+
   return {
     accessToken,
     refreshToken,
     user,
   };
 }
+
+/**
+ * Refresh Token
+ */
 export async function refresh(refreshToken: string, context?: AuditContext) {
+  /**
+   * Vérification du refresh token
+   */
   const storedToken = await RefreshTokenService.verify(refreshToken);
 
+  /**
+   * Audit
+   */
   await auditLog({
     userId: storedToken.user.idUser,
     action: AuditAction.TOKEN_REFRESHED,
@@ -147,7 +204,14 @@ export async function refresh(refreshToken: string, context?: AuditContext) {
     userId: storedToken.user.idUser,
   });
 
-  const accessToken = createAccessToken(storedToken.user);
+  /**
+   * Nouveau access token
+   */
+  const accessToken = await createAccessToken(storedToken.user);
+
+  /**
+   * Rotation du refresh token
+   */
   const newRefreshToken = await RefreshTokenService.rotate(storedToken);
 
   return {
@@ -156,8 +220,13 @@ export async function refresh(refreshToken: string, context?: AuditContext) {
     user: storedToken.user,
   };
 }
+
+/**
+ * Déconnexion
+ */
 export async function logout(refreshToken: string, context?: AuditContext) {
   const storedToken = await RefreshTokenService.verify(refreshToken);
+
   await RefreshTokenService.revoke(storedToken.id);
 
   await auditLog({
@@ -171,17 +240,27 @@ export async function logout(refreshToken: string, context?: AuditContext) {
     ...context,
   });
 }
+
+/**
+ * Vérification de l'email
+ */
 export async function verifyEmail(token: string) {
   const user = await AuthRepository.findByVerificationToken(token);
 
   if (!user) {
     throw createError("Token invalide", 400);
   }
+
   await AuthRepository.verifyEmail(user.idUser);
+
   return {
     message: "Email vérifié avec succès",
   };
 }
+
+/**
+ * Changement du mot de passe
+ */
 export async function changePassword(
   idUser: number,
   oldPassword: string,
@@ -193,13 +272,31 @@ export async function changePassword(
   if (!user) {
     throw createError("Utilisateur introuvable", 404);
   }
+
+  /**
+   * Vérification de l'ancien mot de passe
+   */
   const valid = await comparePassword(oldPassword, user.password);
+
   if (!valid) {
     throw createError("Ancien mot de passe incorrect", 401);
   }
+
+  /**
+   * Hash du nouveau mot de passe
+   */
   const passwordHash = await hashPassword(newPassword);
+
   await AuthRepository.updatePassword(idUser, passwordHash);
+
+  /**
+   * Révocation de toutes les sessions
+   */
   await RefreshTokenService.revokeAll(idUser);
+
+  /**
+   * Audit
+   */
   await auditLog({
     userId: idUser,
     action: AuditAction.PASSWORD_CHANGED,
@@ -207,10 +304,15 @@ export async function changePassword(
     entityId: String(idUser),
     ...context,
   });
+
   return {
     message: "Mot de passe modifié avec succès",
   };
 }
+
+/**
+ * Mot de passe oublié
+ */
 export async function forgotPassword(email: string) {
   const user = await AuthRepository.FindByEmail(email);
 
@@ -218,10 +320,18 @@ export async function forgotPassword(email: string) {
     throw createError("Utilisateur introuvable", 404);
   }
 
+  /**
+   * Génération du token
+   */
   const token = crypto.randomBytes(32).toString("hex");
+
+  /**
+   * Expiration : 15 minutes
+   */
   const expires = new Date(Date.now() + 15 * 60 * 1000);
 
   await AuthRepository.saveResetToken(user.idUser, token, expires);
+
   await sendResetPasswordEmail(user.email, token);
 
   return {
@@ -229,6 +339,9 @@ export async function forgotPassword(email: string) {
   };
 }
 
+/**
+ * Réinitialisation du mot de passe
+ */
 export async function resetPassword(
   token: string,
   newPassword: string,
@@ -240,14 +353,28 @@ export async function resetPassword(
     throw createError("Token invalide", 400);
   }
 
+  /**
+   * Vérification expiration
+   */
   if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
     throw createError("Token expiré", 400);
   }
 
+  /**
+   * Nouveau hash
+   */
   const passwordHash = await hashPassword(newPassword);
+
   await AuthRepository.updatePassword(user.idUser, passwordHash);
+
+  /**
+   * Invalidation des sessions
+   */
   await RefreshTokenService.revokeAll(user.idUser);
 
+  /**
+   * Audit
+   */
   await auditLog({
     userId: user.idUser,
     action: AuditAction.PASSWORD_RESET_REQUESTED,

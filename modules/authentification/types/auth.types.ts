@@ -50,8 +50,6 @@ export type RegisterResponse = {
 };
 
 export type LoginResponse = {
-  accessToken: string;
-  refreshToken: string;
   user: AuthUser;
 };
 
@@ -78,4 +76,8 @@ export type ResetPasswordInput = {
 
 export type ResetPasswordResponse = {
   message: string;
+};
+
+export type CurrentUserResponse = {
+  user: AuthUser;
 };

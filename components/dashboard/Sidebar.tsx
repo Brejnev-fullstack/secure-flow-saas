@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -8,7 +11,10 @@ import {
   Settings,
   UserCircle,
   LogOut,
+  Loader2,
 } from "lucide-react";
+
+import { useLogout } from "@/modules/authentification/hooks/useLogout";
 
 const menuItems = [
   {
@@ -49,39 +55,52 @@ const menuItems = [
 ];
 
 export default function Sidebar() {
+  const router = useRouter();
+
+  const logoutMutation = useLogout();
+
+  const handleLogout = () => {
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        router.replace("/login");
+        router.refresh();
+      },
+    });
+  };
+
   return (
     <aside
       className="
         hidden
-        md:flex
         h-screen
         w-64
         flex-col
         border-r
         bg-white
-        dark:bg-slate-900
+        md:flex
         dark:border-slate-800
+        dark:bg-slate-900
       "
     >
       <div
         className="
-        flex
-        h-16
-        items-center
-        px-6
-        text-xl
-        font-bold
-      "
+          flex
+          h-16
+          items-center
+          px-6
+          text-xl
+          font-bold
+        "
       >
         SecureFlow
       </div>
 
       <nav
         className="
-        flex-1
-        space-y-2
-        px-4
-      "
+          flex-1
+          space-y-2
+          px-4
+        "
       >
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -117,6 +136,9 @@ export default function Sidebar() {
 
       <div className="p-4">
         <button
+          type="button"
+          onClick={handleLogout}
+          disabled={logoutMutation.isPending}
           className="
             flex
             w-full
@@ -127,12 +149,20 @@ export default function Sidebar() {
             py-2
             text-sm
             text-red-500
+            transition
             hover:bg-red-50
+            disabled:cursor-not-allowed
+            disabled:opacity-60
             dark:hover:bg-red-950
           "
         >
-          <LogOut size={18} />
-          Déconnexion
+          {logoutMutation.isPending ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <LogOut size={18} />
+          )}
+
+          {logoutMutation.isPending ? "Déconnexion..." : "Déconnexion"}
         </button>
       </div>
     </aside>

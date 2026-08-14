@@ -1,6 +1,8 @@
 import { api } from "@/libs/api";
 
 import type {
+  AuthUser,
+  CurrentUserResponse,
   ForgotPasswordInput,
   ForgotPasswordResponse,
   LoginInput,
@@ -79,4 +81,29 @@ export async function logout(): Promise<void> {
   await api<void>("/api/authentification/logout", {
     method: "POST",
   });
+}
+
+/**
+ * Récupérer l'utilisateur actuellement connecté.
+ *
+ * GET /api/authentification/me
+ */
+/*export async function getCurrentUser(): Promise<AuthUser> {
+  return api<AuthUser>("/api/authentification/me", {
+    method: "GET",
+  });
+}*/
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await api<{
+    success: boolean;
+    message: string;
+    data: {
+      user: AuthUser;
+    };
+  }>("/api/authentification/me", {
+    method: "GET",
+  });
+
+  return response.data.user;
 }

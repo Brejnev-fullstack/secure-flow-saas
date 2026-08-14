@@ -3,14 +3,20 @@ import prisma from "@/libs/prisma";
 import { verifyToken } from "@/libs/jwt";
 import { unauthorized } from "@/utils/errors";
 
-export async function getCurrentUser(request: NextRequest) {
-  const token = request.cookies.get("access_token")?.value;
+export async function getCurrentUser(
+  request: NextRequest,
+) {
+  const token =
+    request.cookies.get("access_token")?.value;
 
   if (!token) {
-    throw unauthorized("Utilisateur non authentifié");
+    throw unauthorized(
+      "Utilisateur non authentifié",
+    );
   }
 
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
+
   const user = await prisma.user.findUnique({
     where: {
       idUser: payload.idUser,
@@ -18,7 +24,9 @@ export async function getCurrentUser(request: NextRequest) {
   });
 
   if (!user) {
-    throw unauthorized("Utilisateur introuvable");
+    throw unauthorized(
+      "Utilisateur introuvable",
+    );
   }
 
   return user;
